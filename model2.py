@@ -36,7 +36,6 @@ def sinusoids(length, channels, max_timescale=10000):
     return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
 
 
-# HACK this is for encoder, no need for cache nor keygen
 class MultiHeadAttention(nn.Module):
     def __init__(self, n_state: int, n_head: int):
         super().__init__()
@@ -58,8 +57,8 @@ class MultiHeadAttention(nn.Module):
         n_batch, n_ctx, n_state = q.size()
         scale = (n_state // self.n_head) ** -0.25
         q = q.view(q.size(0), q.size(1), self.n_head, -1).permute(0, 2, 1, 3) * scale
-        k = k.view(q.size(0), q.size(1), self.n_head, -1).permute(0, 2, 3, 1) * scale
-        v = v.view(q.size(0), q.size(1), self.n_head, -1).permute(0, 2, 1, 3)
+        k = k.view(k.size(0), k.size(1), self.n_head, -1).permute(0, 2, 3, 1) * scale
+        v = v.view(v.size(0), v.size(1), self.n_head, -1).permute(0, 2, 1, 3)
         qk = q @ k
         if mask is not None:
             qk = qk + mask[:n_ctx, :n_ctx]
@@ -67,7 +66,6 @@ class MultiHeadAttention(nn.Module):
         return (w @ v).permute(0, 2, 1, 3).flatten(start_dim=2)
 
 
-# HACK this is for decoder, need keygen, cache, and xa
 class MultiHeadCrossAttention(nn.Module):
     def __init__(self, n_state: int, n_head: int, keygen: Generator):
         super().__init__()
@@ -102,8 +100,8 @@ class MultiHeadCrossAttention(nn.Module):
         n_batch, n_ctx, n_state = q.size()
         scale = (n_state // self.n_head) ** -0.25
         q = q.view(q.size(0), q.size(1), self.n_head, -1).permute(0, 2, 1, 3) * scale
-        k = k.view(q.size(0), q.size(1), self.n_head, -1).permute(0, 2, 3, 1) * scale
-        v = v.view(q.size(0), q.size(1), self.n_head, -1).permute(0, 2, 1, 3)
+        k = k.view(k.size(0), k.size(1), self.n_head, -1).permute(0, 2, 3, 1) * scale
+        v = v.view(v.size(0), v.size(1), self.n_head, -1).permute(0, 2, 1, 3)
         qk = q @ k
         if mask is not None:
             qk = qk + mask[:n_ctx, :n_ctx]
@@ -268,5 +266,6 @@ class Whisper(nn.Module):
         return logits
 
     def greedy_decode(self):
-        # TODO export, cache should be from here.
+        # TODO torch.jit.export, cache dict should be from here
+        # TODO greedy decode in forward to enable __call__ behaviour?
         pass

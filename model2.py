@@ -9,9 +9,6 @@ import torch.nn.functional as F
 from torch import Tensor
 
 
-# TODO detach from the cache??
-
-
 @dataclass
 class ModelDimensions:
     n_mels: int
@@ -261,6 +258,7 @@ class Whisper(nn.Module):
     def __init__(self, dims: ModelDimensions):
         super().__init__()
         self.dims = dims
+        self.n_text_ctx = dims.n_text_ctx
         self.keygen = itertools.count()
         self.encoder = AudioEncoder(
             self.dims.n_mels,
@@ -278,13 +276,55 @@ class Whisper(nn.Module):
             self.keygen,
         )
 
-    def forward(self, mel: Tensor, tokens: Tensor):
-        cache: dict[int, Tensor] = {}
+    def forward(self, tokens: Tensor, mel: Tensor):
+        """Forward encoder and decoder once to return the logits only."""
         encoded = self.encoder(mel)
-        logits = self.decoder(tokens, encoded, kv_cache=cache)
+        kv_cache: dict[int, Tensor] = {}
+        logits = self.decoder(tokens, mel, kv_cache)
         return logits
 
-    def greedy_decode(self):
-        # TODO torch.jit.export, cache dict should be from here
-        # TODO greedy decode in forward to enable __call__ behaviour?
-        pass
+    @torch.jit.export
+    def greedy_decode(
+        self,
+        tokens: Tensor,
+        mel: Tensor,
+        suppress_blanks: list[int],
+        suppress_nonspeech: list[int],
+    ):
+        """
+        Proof-of-concept of TorchScript-able greedy decoding.
+
+        Args:
+            tokens (Tensor): Decoding 'settings' made from decoded special tokens
+            mel (Tensor): Mel spectrogram of 30 sec of audio
+            suppress_blanks (list[int]): Suppress blank tokens once, see SuppressBlank class
+            suppress_nonspeech (list[int]): Suppress nonspeech tokens, see SuppressTokens class
+        """
+        encoded = self.encoder(mel)
+        last = tokens
+        kv_cache: dict[int, Tensor] = {}
+        blanks_supressed_once = False
+
+        while True:
+
+            # get the last index only
+            logits = self.decoder(last, encoded, kv_cache)
+            last = logits[:, -1]
+
+            # 2 types of suppression
+            if not blanks_supressed_once:
+                last[:, suppress_blanks] = -torch.inf
+                blanks_supressed_once = True
+            last[:, suppress_nonspeech] = -torch.inf
+
+            # select most probable tokens, add to total
+            last = last.argmax(-1, keepdim=True)
+            tokens = torch.cat([tokens, last], dim=-1)
+
+            # when to stop
+            if last.item() == 50257:  # eot
+                break
+            if tokens.size(-1) > self.n_text_ctx:
+                break
+        
+        return tokens

@@ -10,3 +10,8 @@ What's new?
 Same as before:
 * Original checkpoints are still valid.
 * Model architecture is the same as before.
+
+Added files:
+* Scriptable model in `model2.py`
+* Comparison and tests in `tests.ipynb`
+* Prebuilt multilingual GPT2 tokenizer in `whisper/assets/whisper_mult_gpt2/`

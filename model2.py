@@ -292,7 +292,7 @@ class Whisper(nn.Module):
         suppress_nonspeech: list[int],
     ):
         """
-        Proof-of-concept of TorchScript-able greedy decoding.
+        Proof-of-concept of TorchScript-able greedy decoding. Only work for batch size 1.
 
         Args:
             tokens (Tensor): Decoding 'settings' made from decoded special tokens
@@ -326,5 +326,5 @@ class Whisper(nn.Module):
                 break
             if tokens.size(-1) > self.n_text_ctx:
                 break
-        
+
         return tokens
